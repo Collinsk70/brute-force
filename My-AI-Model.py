@@ -1,10 +1,14 @@
-from openai import OpenAI
+from llama_cpp.llama import Llama
 import pyttsx3
 import speech_recognition as sr
 import os
 
-# 🔑 Setup OpenAI client using environment variable or directly (NOT RECOMMENDED to hardcode!)
-client = OpenAI(api_key="YOUR_API_KEY_HERE")  # Replace with your OpenAI key or use env var
+# 🧠 Load the local GGUF model
+llm = Llama(
+    model_path="capybarahermes-2.5-mistral-7b.Q4_K_M.gguf",
+    n_ctx=2048,
+    n_threads=4  # Adjust based on your CPU cores
+)
 
 # 🗣️ Text-to-speech engine
 engine = pyttsx3.init()
@@ -34,21 +38,23 @@ def listen():
         print("❌ Speech recognition service unavailable.")
         return None
 
-def get_gpt_response(prompt):
-    """Query OpenAI's GPT model with new SDK syntax."""
+def get_local_response(prompt):
+    """Query the local GGUF model and get response."""
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # or "gpt-3.5-turbo"
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7
+        output = llm(
+            prompt=f"[INST] {prompt} [/INST]",
+            temperature=0.7,
+            top_p=0.9,
+            max_tokens=512,
+            stop=["</s>"]
         )
-        return response.choices[0].message.content.strip()
+        return output['choices'][0]['text'].strip()
     except Exception as e:
         print(f"❌ Error: {e}")
-        return "I'm sorry, I couldn't get a response from the AI."
+        return "I'm sorry, I couldn't get a response from the local AI."
 
 def main():
-    print("🤖 Welcome to your AI Assistant!")
+    print("🤖 Welcome to your Local AI Assistant!")
     while True:
         mode = input("\n💬 Choose input mode - (T)ext, (V)oice, or (Q)uit: ").lower()
 
@@ -66,7 +72,7 @@ def main():
             continue
 
         print("🔮 Thinking...")
-        answer = get_gpt_response(prompt)
+        answer = get_local_response(prompt)
         print(f"\n🤖 AI: {answer}")
         speak(answer)
 
