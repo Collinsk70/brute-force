@@ -1,79 +1,85 @@
-from llama_cpp.llama import Llama
+from llama_cpp import Llama
 import pyttsx3
 import speech_recognition as sr
 import os
+import time
 
-# 🧠 Load the local GGUF model
+MODEL_PATH = "capybarahermes-2.5-mistral-7b.Q4_K_M.gguf"
+if not os.path.exists(MODEL_PATH):
+    print(f"❌ Model file not found at: {MODEL_PATH}")
+    exit(1)
+
+print("🧠 Loading model (this may take a moment)...")
 llm = Llama(
-    model_path="capybarahermes-2.5-mistral-7b.Q4_K_M.gguf",
+    model_path=MODEL_PATH,
     n_ctx=2048,
-    n_threads=4  # Adjust based on your CPU cores
+    n_threads=os.cpu_count() or 4,
+    verbose=False
 )
 
-# 🗣️ Text-to-speech engine
 engine = pyttsx3.init()
 
 def speak(text):
-    """Speak the response out loud."""
     engine.say(text)
     engine.runAndWait()
 
 def listen():
-    """Capture voice input from the microphone and convert to text."""
     recognizer = sr.Recognizer()
     with sr.Microphone() as source:
-        print("🎙️ Listening... Speak your question.")
+        print("🎙️ Listening... Speak now.")
         recognizer.adjust_for_ambient_noise(source)
         audio = recognizer.listen(source)
-
     try:
         print("🔍 Recognizing...")
-        text = recognizer.recognize_google(audio)
-        print(f"✅ You said: {text}")
-        return text
+        return recognizer.recognize_google(audio)
     except sr.UnknownValueError:
         print("❌ Could not understand audio.")
-        return None
-    except sr.RequestError:
-        print("❌ Speech recognition service unavailable.")
-        return None
+    except sr.RequestError as e:
+        print(f"❌ Speech service error: {e}")
+    return None
 
 def get_local_response(prompt):
-    """Query the local GGUF model and get response."""
+    """Use raw text completion with an inline system prompt."""
+    sys_prompt = "You are a helpful assistant.\n\nUser: "
+    full_prompt = sys_prompt + prompt + "\nAssistant:"
+    print("🤖 Generating response (raw text-completion)...")
+    start = time.time()
     try:
         output = llm(
-            prompt=f"[INST] {prompt} [/INST]",
+            prompt=full_prompt,
             temperature=0.7,
             top_p=0.9,
-            max_tokens=512,
-            stop=["</s>"]
+            max_tokens=128,
+            stop=["\n", "User:", "Assistant:"]
         )
-        return output['choices'][0]['text'].strip()
     except Exception as e:
-        print(f"❌ Error: {e}")
-        return "I'm sorry, I couldn't get a response from the local AI."
+        print(f"❌ Inference error: {e}")
+        return "Error during inference."
+    elapsed = time.time() - start
+    print(f"✅ Response time: {elapsed:.2f}s")
+    # output['choices'][0]['text'] holds the completion after "Assistant:"
+    return output['choices'][0]['text'].strip()
 
 def main():
-    print("🤖 Welcome to your Local AI Assistant!")
+    print("\n🤖 Local AI Assistant Ready!")
+    print("💬 Type 'T' for text, 'V' for voice, 'Q' to quit.")
     while True:
-        mode = input("\n💬 Choose input mode - (T)ext, (V)oice, or (Q)uit: ").lower()
-
+        mode = input("\n🔘 Mode (T/V/Q): ").strip().lower()
         if mode == 'q':
             print("👋 Goodbye!")
             break
-        elif mode == 't':
-            prompt = input("📝 Type your message: ")
+        if mode == 't':
+            prompt = input("📝 Your input: ").strip()
         elif mode == 'v':
             prompt = listen()
             if not prompt:
                 continue
         else:
-            print("❌ Invalid input. Choose 'T', 'V', or 'Q'.")
+            print("❌ Invalid choice.")
             continue
 
-        print("🔮 Thinking...")
         answer = get_local_response(prompt)
-        print(f"\n🤖 AI: {answer}")
+        print(f"\n🤖 AI: {answer}\n")
         speak(answer)
 
 if __name__ == "__main__":
